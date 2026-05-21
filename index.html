@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Epic Gift — копия</title>
+    <script src="https://telegram.org/js/telegram-web-app.js?v=7"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            background-color: var(--tg-theme-bg-color, #ffffff);
+            color: var(--tg-theme-text-color, #000000);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            padding-bottom: 30px;
+        }
+
+        .card {
+            background-color: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 20px;
+            transition: all 0.2s ease;
+        }
+
+        .balance {
+            font-size: 28px;
+            font-weight: bold;
+            color: var(--tg-theme-button-color, #3390ec);
+            margin: 10px 0;
+        }
+
+        .referral-code {
+            background-color: var(--tg-theme-bg-color, #fff);
+            border: 1px solid var(--tg-theme-hint-color, #aaa);
+            border-radius: 14px;
+            padding: 12px;
+            font-family: monospace;
+            font-size: 18px;
+            text-align: center;
+            letter-spacing: 1px;
+            margin: 15px 0;
+            word-break: break-all;
+        }
+
+        button {
+            background-color: var(--tg-theme-button-color, #3390ec);
+            color: var(--tg-theme-button-text-color, #ffffff);
+            border: none;
+            border-radius: 14px;
+            padding: 14px 20px;
+            font-size: 16px;
+            font-weight: 600;
+            width: 100%;
+            margin-top: 12px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        button:active {
+            opacity: 0.7;
+        }
+
+        .gift-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--tg-theme-bg-color, #fff);
+            border-radius: 16px;
+            padding: 12px;
+            margin-bottom: 12px;
+            border: 1px solid var(--tg-theme-hint-color, #ddd);
+        }
+
+        .gift-name {
+            font-weight: 600;
+        }
+
+        .gift-price {
+            color: var(--tg-theme-button-color, #3390ec);
+            font-weight: bold;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            text-align: center;
+            padding: 12px;
+            border-radius: 30px;
+            font-size: 14px;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="card">
+        <div>💰 Твой баланс</div>
+        <div class="balance" id="balance">0</div>
+        <div>⭐ Монеты Epic Gift</div>
+    </div>
+
+    <div class="card">
+        <div>🎁 Подарить другу</div>
+        <div class="gift-item">
+            <span class="gift-name">❤️ Сердце</span>
+            <div>
+                <span class="gift-price">10 ⭐</span>
+                <button style="width: auto; padding: 6px 16px; margin-left: 12px; display: inline-block;" data-gift-id="heart" data-price="10">Отправить</button>
+            </div>
+        </div>
+        <div class="gift-item">
+            <span class="gift-name">🎂 Торт</span>
+            <div>
+                <span class="gift-price">25 ⭐</span>
+                <button style="width: auto; padding: 6px 16px; margin-left: 12px; display: inline-block;" data-gift-id="cake" data-price="25">Отправить</button>
+            </div>
+        </div>
+        <div class="gift-item">
+            <span class="gift-name">🚀 Ракета</span>
+            <div>
+                <span class="gift-price">50 ⭐</span>
+                <button style="width: auto; padding: 6px 16px; margin-left: 12px; display: inline-block;" data-gift-id="rocket" data-price="50">Отправить</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div>🔗 Реферальная система</div>
+        <div style="font-size: 14px; margin: 10px 0;">Пригласи друга — получи 50 ⭐</div>
+        <div class="referral-code" id="refLink">Загрузка...</div>
+        <button id="copyBtn">📋 Копировать ссылку</button>
+        <div style="font-size: 13px; margin-top: 15px; color: var(--tg-theme-hint-color, #888);">
+            👥 Приглашённые тобой: <span id="referralCount">0</span>
+        </div>
+    </div>
+</div>
+<div id="toast" class="toast"></div>
+
+<script>
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand();          // растянуть на весь экран
+    tg.enableClosingConfirmation(); // запрос подтверждения при закрытии
+
+    // --- Глобальные переменные ---
+    let currentUser = {
+        id: null,
+        username: null,
+        balance: 0,
+        referralCount: 0
+    };
+
+    let myReferralCode = "";
+
+    // --- Вспомогательные функции ---
+    function showToast(text, duration = 2000) {
+        const toast = document.getElementById('toast');
+        toast.textContent = text;
+        toast.style.opacity = '1';
+        setTimeout(() => {
+            toast.style.opacity = '0';
+        }, duration);
+    }
+
+    // Обновить интерфейс баланса и рефералов
+    function updateUI() {
+        document.getElementById('balance').innerText = currentUser.balance;
+        document.getElementById('referralCount').innerText = currentUser.referralCount;
+        if (myReferralCode) {
+            const link = `https://t.me/${tg.initDataUnsafe.user?.username ? tg.initDataUnsafe.user.username : 'epic_gift_bot'}/app?startapp=${myReferralCode}`;
+            document.getElementById('refLink').innerHTML = link;
+        } else {
+            document.getElementById('refLink').innerText = 'Ошибка кода';
+        }
+    }
+
+    // --- Отправка данных в бэкенд (имитация локального хранилища, т.к. нет сервера) ---
+    // ВНИМАНИЕ: Это ПОЛНОСТЬЮ ФРОНТЕНД-ДЕМО для копии. Для реальной работы нужен бэкенд из предыдущего ответа.
+    // Здесь мы сохраняем данные в localStorage, чтобы имитировать работу mini app.
+    function loadLocalUser() {
+        const stored = localStorage.getItem('epic_gift_user');
+        if (stored) {
+            const data = JSON.parse(stored);
+            currentUser = data;
+        } else {
+            // Новый пользователь: определяем реферера из start_param
+            let referrerId = null;
+            const initUnsafe = tg.initDataUnsafe;
+            if (initUnsafe && initUnsafe.start_param) {
+                const sp = initUnsafe.start_param;
+                if (sp.startsWith('cmp_')) {
+                    referrerId = sp.substring(4);
+                    // зачисляем рефереру бонус (имитация)
+                    const referrerData = localStorage.getItem(`user_${referrerId}`);
+                    if (referrerData) {
+                        let refUser = JSON.parse(referrerData);
+                        refUser.balance += 50;
+                        refUser.referralCount += 1;
+                        localStorage.setItem(`user_${referrerId}`, JSON.stringify(refUser));
+                        if (referrerId === currentUser.id) {} // не сам себе
+                    }
+                }
+            }
+            currentUser = {
+                id: initUnsafe?.user?.id || Math.floor(Math.random() * 1000000000),
+                username: initUnsafe?.user?.username || 'player',
+                balance: 100,   // стартовый бонус
+                referralCount: 0
+            };
+            // сохраняем
+            localStorage.setItem(`user_${currentUser.id}`, JSON.stringify(currentUser));
+        }
+        // синхронизируем глобальный объект
+        const storedGlobal = localStorage.getItem(`user_${currentUser.id}`);
+        if (storedGlobal) currentUser = JSON.parse(storedGlobal);
+        myReferralCode = `cmp_${currentUser.id}`;
+        updateUI();
+    }
+
+    function saveCurrentUser() {
+        localStorage.setItem(`user_${currentUser.id}`, JSON.stringify(currentUser));
+        updateUI();
+    }
+
+    // Отправка подарка (имитация)
+    function sendGift(giftId, price) {
+        if (currentUser.balance >= price) {
+            currentUser.balance -= price;
+            saveCurrentUser();
+            showToast(`🎁 Подарок "${giftId}" отправлен! -${price} ⭐`);
+            // В реальном приложении здесь был бы вызов tg.sendData или fetch на бэкенд
+            tg.sendData(JSON.stringify({
+                action: 'gift',
+                gift: giftId,
+                price: price,
+                to_user: null  // в реальной версии выбор получателя
+            }));
+        } else {
+            showToast(`❌ Не хватает ⭐. Нужно ${price}, у тебя ${currentUser.balance}`);
+            tg.HapticFeedback.notificationOccurred('error');
+        }
+    }
+
+    // Копирование реферальной ссылки
+    document.getElementById('copyBtn')?.addEventListener('click', () => {
+        const linkText = document.getElementById('refLink').innerText;
+        if (linkText && linkText !== 'Ошибка кода') {
+            navigator.clipboard.writeText(linkText).then(() => {
+                showToast('✅ Ссылка скопирована!');
+                tg.HapticFeedback.impactOccurred('light');
+            }).catch(() => showToast('❌ Не удалось скопировать'));
+        } else {
+            showToast('⚠️ Реферальный код ещё не загружен');
+        }
+    });
+
+    // Обработчики кнопок подарков
+    document.querySelectorAll('[data-gift-id]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const giftId = btn.getAttribute('data-gift-id');
+            const price = parseInt(btn.getAttribute('data-price'), 10);
+            sendGift(giftId, price);
+        });
+    });
+
+    // Основная кнопка Telegram (если нужно установить)
+    tg.MainButton.setText('🎁 Epic Gift');
+    tg.MainButton.show();
+    tg.MainButton.onClick(() => {
+        showToast('Добро пожаловать в Epic Gift! Баланс: ' + currentUser.balance);
+        tg.HapticFeedback.impactOccurred('medium');
+    });
+
+    // Инициализация
+    loadLocalUser();
+    tg.BackButton.show();
+    tg.BackButton.onClick(() => {
+        tg.close();
+    });
+</script>
+</body>
+</html>
